@@ -27,11 +27,11 @@ import { ChevronDownIcon, MagnifyingGlassIcon } from '@heroicons/react/20/solid'
 import { logout } from '../store/authSlice'
 
 const navigation = [
-  { name: 'Dashboard', href: '#', icon: HomeIcon, current: true },
-  { name: 'Expense', href: '#', icon: UsersIcon, current: false },
+  { name: 'Dashboard', href: '/dashboard', icon: HomeIcon, current: true },
+  { name: 'Expense', href: '/expenses', icon: UsersIcon, current: false },
   { name: 'Income', href: '#', icon: FolderIcon, current: false },
-  { name: 'Budget', href: '#', icon: CalendarIcon, current: false },
-  { name: 'Bills', href: '#', icon: DocumentDuplicateIcon, current: false },
+  { name: 'Budget', href: '/budget', icon: CalendarIcon, current: false },
+  { name: 'Bills', href: '/bills', icon: DocumentDuplicateIcon, current: false },
   { name: 'Settings', href: '#', icon: ChartPieIcon, current: false },
 ]
 const userNavigation = [
@@ -182,7 +182,7 @@ export default function Dashboard() {
                     ))}
                   </ul>
                 </li>
-                
+
                 <li className="mt-auto">
                   <a
                     href="#"
