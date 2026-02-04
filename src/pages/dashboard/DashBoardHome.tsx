@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
-import { useDispatch, useSelector } from 'react-redux'
+import { useNavigate, NavLink } from 'react-router-dom'
+import { useSelector } from 'react-redux'
 import {
   Dialog,
   DialogBackdrop,
@@ -15,7 +15,6 @@ import {
   Bars3Icon,
   BellIcon,
   CalendarIcon,
-  ChartPieIcon,
   Cog6ToothIcon,
   DocumentDuplicateIcon,
   FolderIcon,
@@ -24,18 +23,20 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { ChevronDownIcon, MagnifyingGlassIcon } from '@heroicons/react/20/solid'
-import { logout } from '../store/authSlice'
+import { logoutThunk } from '../../store/authThunks'
+import { useAppDispatch } from '../../store/hooks'
+import RightSectionDashBoard from './RightSection'
 
 const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: HomeIcon, current: true },
-  { name: 'Expense', href: '/expenses', icon: UsersIcon, current: false },
-  { name: 'Income', href: '#', icon: FolderIcon, current: false },
-  { name: 'Budget', href: '/budget', icon: CalendarIcon, current: false },
-  { name: 'Bills', href: '/bills', icon: DocumentDuplicateIcon, current: false },
-  { name: 'Settings', href: '#', icon: ChartPieIcon, current: false },
+  { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
+  { name: 'Expense', href: '/expenses', icon: UsersIcon },
+  { name: 'Income', href: '/incomes', icon: FolderIcon },
+  { name: 'Budget', href: '/budgets', icon: CalendarIcon },
+  { name: 'Bills', href: '/bills', icon: DocumentDuplicateIcon },
 ]
+
 const userNavigation = [
-  { name: 'Your profile', href: '#', action: 'profile' as const },
+  { name: 'Your profile', href: '/profile', action: 'profile' as const },
   { name: 'Sign out', href: '/login', action: 'signout' as const },
 ]
 
@@ -43,10 +44,10 @@ function classNames(...classes: string[]) {
   return classes.filter(Boolean).join(' ')
 }
 
-export default function Dashboard() {
+export default function DashboardHome() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const navigate = useNavigate()
-  const dispatch = useDispatch()
+  const dispatch = useAppDispatch()
   const user = useSelector((state: { auth: { user: { name: string } | null } }) => state.auth.user)
 
   return (
@@ -72,8 +73,7 @@ export default function Dashboard() {
                 </div>
               </TransitionChild>
 
-              {/* Sidebar component, swap this element with another sidebar if you like */}
-              <div className="relative flex grow flex-col gap-y-5 overflow-y-auto bg-white px-6 pb-4 dark:bg-gray-900 dark:ring dark:ring-white/10 dark:before:pointer-events-none dark:before:absolute dark:before:inset-0 dark:before:bg-black/10">
+              <div className="relative flex grow flex-col gap-y-5 overflow-y-auto bg-white px-6 pb-4 dark:bg-gray-900 dark:ring dark:ring-white/10">
                 <div className="relative flex h-16 shrink-0 items-center">
                   <img
                     alt="Your Company"
@@ -92,42 +92,57 @@ export default function Dashboard() {
                       <ul role="list" className="-mx-2 space-y-1">
                         {navigation.map((item) => (
                           <li key={item.name}>
-                            <a
-                              href={item.href}
-                              className={classNames(
-                                item.current
-                                  ? 'bg-gray-50 text-indigo-600 dark:bg-white/5 dark:text-white'
-                                  : 'text-gray-700 hover:bg-gray-50 hover:text-indigo-600 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-white',
-                                'group flex gap-x-3 rounded-md p-2 text-sm/6 font-semibold',
-                              )}
+                            <NavLink
+                              to={item.href}
+                              onClick={() => setSidebarOpen(false)}
+                              className={({ isActive }) =>
+                                classNames(
+                                  isActive
+                                    ? 'bg-gray-50 text-indigo-600 dark:bg-white/5 dark:text-white'
+                                    : 'text-gray-700 hover:bg-gray-50 hover:text-indigo-600 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-white',
+                                  'group flex gap-x-3 rounded-md p-2 text-sm/6 font-semibold',
+                                )
+                              }
                             >
-                              <item.icon
-                                aria-hidden="true"
-                                className={classNames(
-                                  item.current
-                                    ? 'text-indigo-600 dark:text-white'
-                                    : 'text-gray-400 group-hover:text-indigo-600 dark:group-hover:text-white',
-                                  'size-6 shrink-0',
-                                )}
-                              />
-                              {item.name}
-                            </a>
+                              {({ isActive }) => (
+                                <>
+                                  <item.icon
+                                    aria-hidden="true"
+                                    className={classNames(
+                                      isActive
+                                        ? 'text-indigo-600 dark:text-white'
+                                        : 'text-gray-400 group-hover:text-indigo-600 dark:group-hover:text-white',
+                                      'size-6 shrink-0',
+                                    )}
+                                  />
+                                  {item.name}
+                                </>
+                              )}
+                            </NavLink>
                           </li>
                         ))}
                       </ul>
                     </li>
 
                     <li className="mt-auto">
-                      <a
-                        href="#"
-                        className="group -mx-2 flex gap-x-3 rounded-md p-2 text-sm/6 font-semibold text-gray-700 hover:bg-gray-50 hover:text-indigo-600 dark:text-gray-300 dark:hover:bg-white/5 dark:hover:text-white"
+                      <NavLink
+                        to="/settings"
+                        onClick={() => setSidebarOpen(false)}
+                        className={({ isActive }) =>
+                          classNames(
+                            isActive
+                              ? 'bg-gray-50 text-indigo-600 dark:bg-white/5 dark:text-white'
+                              : 'text-gray-700 hover:bg-gray-50 hover:text-indigo-600 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-white',
+                            'group -mx-2 flex gap-x-3 rounded-md p-2 text-sm/6 font-semibold',
+                          )
+                        }
                       >
                         <Cog6ToothIcon
                           aria-hidden="true"
                           className="size-6 shrink-0 text-gray-400 group-hover:text-indigo-600 dark:group-hover:text-white"
                         />
                         Settings
-                      </a>
+                      </NavLink>
                     </li>
                   </ul>
                 </nav>
@@ -138,7 +153,6 @@ export default function Dashboard() {
 
         {/* Static sidebar for desktop */}
         <div className="hidden bg-gray-900 lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-72 lg:flex-col">
-          {/* Sidebar component, swap this element with another sidebar if you like */}
           <div className="flex grow flex-col gap-y-5 overflow-y-auto border-r border-gray-200 bg-white px-6 pb-4 dark:border-white/10 dark:bg-black/10">
             <div className="flex h-16 shrink-0 items-center">
               <img
@@ -158,42 +172,55 @@ export default function Dashboard() {
                   <ul role="list" className="-mx-2 space-y-1">
                     {navigation.map((item) => (
                       <li key={item.name}>
-                        <a
-                          href={item.href}
-                          className={classNames(
-                            item.current
-                              ? 'bg-gray-50 text-indigo-600 dark:bg-white/5 dark:text-white'
-                              : 'text-gray-700 hover:bg-gray-50 hover:text-indigo-600 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-white',
-                            'group flex gap-x-3 rounded-md p-2 text-sm/6 font-semibold',
-                          )}
+                        <NavLink
+                          to={item.href}
+                          className={({ isActive }) =>
+                            classNames(
+                              isActive
+                                ? 'bg-gray-50 text-indigo-600 dark:bg-white/5 dark:text-white'
+                                : 'text-gray-700 hover:bg-gray-50 hover:text-indigo-600 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-white',
+                              'group flex gap-x-3 rounded-md p-2 text-sm/6 font-semibold',
+                            )
+                          }
                         >
-                          <item.icon
-                            aria-hidden="true"
-                            className={classNames(
-                              item.current
-                                ? 'text-indigo-600 dark:text-white'
-                                : 'text-gray-400 group-hover:text-indigo-600 dark:group-hover:text-white',
-                              'size-6 shrink-0',
-                            )}
-                          />
-                          {item.name}
-                        </a>
+                          {({ isActive }) => (
+                            <>
+                              <item.icon
+                                aria-hidden="true"
+                                className={classNames(
+                                  isActive
+                                    ? 'text-indigo-600 dark:text-white'
+                                    : 'text-gray-400 group-hover:text-indigo-600 dark:group-hover:text-white',
+                                  'size-6 shrink-0',
+                                )}
+                              />
+                              {item.name}
+                            </>
+                          )}
+                        </NavLink>
                       </li>
                     ))}
                   </ul>
                 </li>
 
                 <li className="mt-auto">
-                  <a
-                    href="#"
-                    className="group -mx-2 flex gap-x-3 rounded-md p-2 text-sm/6 font-semibold text-gray-700 hover:bg-gray-50 hover:text-indigo-600 dark:text-gray-300 dark:hover:bg-white/5 dark:hover:text-white"
+                  <NavLink
+                    to="/settings"
+                    className={({ isActive }) =>
+                      classNames(
+                        isActive
+                          ? 'bg-gray-50 text-indigo-600 dark:bg-white/5 dark:text-white'
+                          : 'text-gray-700 hover:bg-gray-50 hover:text-indigo-600 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-white',
+                        'group -mx-2 flex gap-x-3 rounded-md p-2 text-sm/6 font-semibold',
+                      )
+                    }
                   >
                     <Cog6ToothIcon
                       aria-hidden="true"
                       className="size-6 shrink-0 text-gray-400 group-hover:text-indigo-600 dark:group-hover:text-white"
                     />
                     Settings
-                  </a>
+                  </NavLink>
                 </li>
               </ul>
             </nav>
@@ -211,7 +238,6 @@ export default function Dashboard() {
               <Bars3Icon aria-hidden="true" className="size-6" />
             </button>
 
-            {/* Separator */}
             <div aria-hidden="true" className="h-6 w-px bg-gray-200 lg:hidden dark:bg-white/10" />
 
             <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
@@ -233,19 +259,23 @@ export default function Dashboard() {
                   <BellIcon aria-hidden="true" className="size-6" />
                 </button>
 
-                {/* Separator */}
                 <div aria-hidden="true" className="hidden lg:block lg:h-6 lg:w-px lg:bg-gray-200 dark:lg:bg-white/10" />
 
-                {/* Profile dropdown */}
                 <Menu as="div" className="relative">
                   <MenuButton className="relative flex items-center">
                     <span className="absolute -inset-1.5" />
                     <span className="sr-only">Open user menu</span>
-                    <img
+
+                    <span
+                      className="text-center size-8 rounded-full bg-green-400 outline outline-1 -outline-offset-1 outline-black/5 dark:bg-gray-800 dark:outline-white/10 text-xl"
+                    >
+                      {user?.name.slice(0, 1)}
+                    </span>
+                    {/* <img
                       alt=""
                       src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80"
                       className="size-8 rounded-full bg-gray-50 outline outline-1 -outline-offset-1 outline-black/5 dark:bg-gray-800 dark:outline-white/10"
-                    />
+                    /> */}
                     <span className="hidden lg:flex lg:items-center">
                       <span aria-hidden="true" className="ml-4 text-sm/6 font-semibold text-gray-900 dark:text-white">
                         {user?.name ?? 'User'}
@@ -263,7 +293,7 @@ export default function Dashboard() {
                           <button
                             type="button"
                             onClick={() => {
-                              dispatch(logout())
+                              dispatch(logoutThunk())
                               navigate('/login')
                             }}
                             className="block w-full px-3 py-1 text-left text-sm/6 text-gray-900 data-[focus]:bg-gray-50 data-[focus]:outline-none dark:text-white dark:data-[focus]:bg-white/5"
@@ -271,12 +301,12 @@ export default function Dashboard() {
                             {item.name}
                           </button>
                         ) : (
-                          <Link
+                          <NavLink
                             to={item.href}
                             className="block px-3 py-1 text-sm/6 text-gray-900 data-[focus]:bg-gray-50 data-[focus]:outline-none dark:text-white dark:data-[focus]:bg-white/5"
                           >
                             {item.name}
-                          </Link>
+                          </NavLink>
                         )}
                       </MenuItem>
                     ))}
@@ -285,10 +315,7 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
-
-          <main className="py-10">
-            <div className="px-4 sm:px-6 lg:px-8">{/* Your content */}</div>
-          </main>
+          <RightSectionDashBoard />
         </div>
       </div>
     </>

@@ -1,65 +1,66 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { useEffect } from "react";
 
 import Login from "./pages/authentication/Login";
 import Register from "./pages/authentication/Register";
 import ResetPassword from "./pages/authentication/ResetPassword";
 
-import Dashboard from "./pages/Dashboard";
-import ExpenseIndex from "./pages/expense";
-import BillIndex from "./pages/bills";
-import BudgetIndex from "./pages/budget";
-
 import ProtectedRoute from "./components/ProtectedRoute";
+import PublicRoute from "./components/PublicRoute";
+
+import { useAppDispatch } from "./store/hooks";
+import { checkAuthThunk } from "./store/authThunks";
+import DashboardHome from "./pages/dashboard/DashBoardHome";
 
 function App() {
+  const dispatch = useAppDispatch();
+
+  useEffect(() => {
+    dispatch(checkAuthThunk());
+  }, [dispatch]);
+
   return (
     <Router>
       <Routes>
-        {/* Public Routes */}
         <Route path="/" element={<Navigate to="/login" replace />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
 
-        {/* Protected Routes */}
+        {/* Public Routes */}
         <Route
-          path="/dashboard"
+          path="/login"
           element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
+            <PublicRoute>
+              <Login />
+            </PublicRoute>
           }
         />
 
         <Route
-          path="/expenses"
+          path="/register"
           element={
-            <ProtectedRoute>
-              <ExpenseIndex />
-            </ProtectedRoute>
+            <PublicRoute>
+              <Register />
+            </PublicRoute>
           }
         />
 
         <Route
-          path="/budget"
+          path="/reset-password"
           element={
-            <ProtectedRoute>
-              <BudgetIndex />
-            </ProtectedRoute>
+            <PublicRoute>
+              <ResetPassword />
+            </PublicRoute>
           }
         />
 
+        {/* Protected Routes - Dashboard with nested routes */}
         <Route
-          path="/bills"
+          path="/*"
           element={
             <ProtectedRoute>
-              <BillIndex />
+              <DashboardHome />
             </ProtectedRoute>
           }
         />
-
-        {/* Fallback */}
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </Router>
   );

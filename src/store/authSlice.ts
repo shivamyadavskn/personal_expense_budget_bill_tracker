@@ -1,59 +1,66 @@
-import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import Cookies from 'js-cookie';
-
-interface User {
-  id: string;
-  email: string;
-  name: string;
-}
+import { createSlice } from "@reduxjs/toolkit";
+import { loginThunk, checkAuthThunk, logoutThunk } from "./authThunks";
+import type { User } from "../types/auth";
 
 interface AuthState {
-  user: User | null;
+  user?: User | null;
   isAuthenticated: boolean;
   loading: boolean;
+  error: string | null;
 }
 
 const initialState: AuthState = {
   user: null,
   isAuthenticated: false,
-  loading: false,
+  loading: true, // 🔴 IMPORTANT: start as true
+  error: null,
 };
 
 const authSlice = createSlice({
-  name: 'auth',
+  name: "auth",
   initialState,
-  reducers: {
-    loginStart: (state) => {
-      state.loading = true;
-    },
-    loginSuccess: (state, action: PayloadAction<User>) => {
-      state.user = action.payload;
-      state.isAuthenticated = true;
-      state.loading = false;
-      Cookies.set('authToken', 'user-token-' + action.payload.id, { expires: 7 });
-    },
-    loginFailure: (state) => {
-      state.loading = false;
-      state.user = null;
-      state.isAuthenticated = false;
-    },
-    logout: (state) => {
-      state.user = null;
-      state.isAuthenticated = false;
-      state.loading = false;
-      Cookies.remove('authToken');
-    },
-    checkAuth: (state) => {
-      const token = Cookies.get('authToken');
-      if (token) {
+  reducers: {},
+  extraReducers: (builder) => {
+    builder
+      // ================= LOGIN =================
+      .addCase(loginThunk.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(loginThunk.fulfilled, (state, action) => {
+        state.user = action.payload;
         state.isAuthenticated = true;
-      } else {
+        state.loading = false;
+      })
+      .addCase(loginThunk.rejected, (state, action) => {
+        state.loading = false;
         state.isAuthenticated = false;
+        state.error = action.payload as string;
+      })
+
+      // ================= CHECK AUTH =================
+      .addCase(checkAuthThunk.pending, (state) => {
+        state.loading = true; // 🔴 REQUIRED
+      })
+      .addCase(checkAuthThunk.fulfilled, (state, action) => {
+        state.user = action.payload;
+        state.isAuthenticated = true;
+        state.loading = false; // 🔴 REQUIRED
+      })
+      .addCase(checkAuthThunk.rejected, (state) => {
         state.user = null;
-      }
-    },
+        state.isAuthenticated = false;
+        state.loading = false; // 🔴 REQUIRED
+      })
+
+
+      
+      // ================= LOGOUT =================
+      .addCase(logoutThunk.fulfilled, (state) => {
+        state.user = null;
+        state.isAuthenticated = false;
+        state.loading = false;
+      });
   },
 });
 
-export const { loginStart, loginSuccess, loginFailure, logout, checkAuth } = authSlice.actions;
 export default authSlice.reducer;

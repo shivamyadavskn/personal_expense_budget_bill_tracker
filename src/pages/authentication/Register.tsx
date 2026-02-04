@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { useDispatch } from 'react-redux';
 import { useNavigate, Link } from 'react-router-dom';
-import { loginStart, loginSuccess } from '../../store/authSlice';
+import { checkAuthThunk, userRegistrationThunk} from '../../store/authThunks';
+import { useAppDispatch } from '../../store/hooks';
+
 
 const Register = () => {
   const [name, setName] = useState('');
@@ -9,40 +10,29 @@ const Register = () => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
-  const dispatch = useDispatch();
+  const dispatch = useAppDispatch();
+
   const navigate = useNavigate();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setError("");
 
-    if (!name || !email || !password || !confirmPassword) {
-      setError('Please fill in all fields');
-      return;
-    }
+  try {
+    // 1️⃣ Register (cookie set)
+    await dispatch(
+      userRegistrationThunk({ name, email, password })
+    ).unwrap();
 
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
-      return;
-    }
+    // 2️⃣ Load authenticated user into Redux
+    await dispatch(checkAuthThunk()).unwrap();
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters');
-      return;
-    }
-
-    dispatch(loginStart());
-
-    setTimeout(() => {
-      const user = {
-        id: Date.now().toString(),
-        email: email,
-        name: name,
-      };
-      dispatch(loginSuccess(user));
-      navigate('/dashboard');
-    }, 500);
-  };
+    // 3️⃣ NOW redirect
+    navigate("/dashboard", { replace: true });
+  } catch (err: any) {
+    setError(err);
+  }
+};
 
   return (
     <div className="flex min-h-full flex-col justify-center py-12 sm:px-6 lg:px-8 bg-gray-50">

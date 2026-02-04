@@ -1,20 +1,22 @@
-import { useEffect } from 'react';
-import { useSelector, useDispatch } from 'react-redux';
-import { Navigate } from 'react-router-dom';
-import { RootState } from '../store/store';
-import { checkAuth } from '../store/authSlice';
+import { Navigate } from "react-router-dom";
+import { useAppSelector } from "../store/hooks";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
 }
 
 const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
-  const dispatch = useDispatch();
-  const { isAuthenticated } = useSelector((state: RootState) => state.auth);
+  const { isAuthenticated, loading } = useAppSelector(
+    (state) => state.auth
+  );
 
-  useEffect(() => {
-    dispatch(checkAuth());
-  }, [dispatch]);
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-20 h-20 border-[4px] border-gray-200 border-t-blue-500 rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
