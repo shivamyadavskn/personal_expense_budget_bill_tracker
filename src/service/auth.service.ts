@@ -5,12 +5,6 @@ export interface LoginPayload {
   password?: string;
 }
 
-// export interface User {
-//   id: string;
-//   email: string;
-//   name: string;
-// }
-
 export const authService = {
   login: (data: LoginPayload) => api.post<{ user: any }>("/auth/login", data),
   register: (data: any) => api.post<{ user: any }>("/auth/register", data),

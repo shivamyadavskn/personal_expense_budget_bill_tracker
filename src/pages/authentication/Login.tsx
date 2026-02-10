@@ -25,7 +25,6 @@ const Login = () => {
       await dispatch(
         loginThunk({ email, password })
       ).unwrap();
-
       // ✅ cookie is already set by backend
       navigate("/dashboard");
     } catch (err: any) {

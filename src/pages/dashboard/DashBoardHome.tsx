@@ -267,10 +267,15 @@ export default function DashboardHome() {
                     <span className="sr-only">Open user menu</span>
 
                     <span
-                      className="text-center size-8 rounded-full bg-green-400 outline outline-1 -outline-offset-1 outline-black/5 dark:bg-gray-800 dark:outline-white/10 text-xl"
+                      className="flex items-center justify-center size-8 rounded-full 
+             bg-green-500 text-white text-sm font-semibold
+             outline outline-1 -outline-offset-1 outline-black/5
+             dark:bg-gray-800 dark:outline-white/10"
+                      aria-label="User avatar"
                     >
-                      {user?.name.slice(0, 1)}
+                      {(user?.name?.charAt(0) || "U").toUpperCase()}
                     </span>
+
                     {/* <img
                       alt=""
                       src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80"
