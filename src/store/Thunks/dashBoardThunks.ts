@@ -1,5 +1,5 @@
 import { createAsyncThunk } from "@reduxjs/toolkit";
-import { dashboardService } from "../service/dashboard.service";
+import { dashboardService } from "../../service/dashboard.service";
 
 
 

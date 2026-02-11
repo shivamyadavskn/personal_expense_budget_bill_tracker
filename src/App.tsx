@@ -9,7 +9,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import PublicRoute from "./components/PublicRoute";
 
 import { useAppDispatch } from "./store/hooks";
-import { checkAuthThunk } from "./store/authThunks";
+import { checkAuthThunk } from "./store/Thunks/authThunks";
 import DashboardHome from "./pages/dashboard/DashBoardHome";
 
 function App() {

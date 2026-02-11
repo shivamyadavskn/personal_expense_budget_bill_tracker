@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { checkAuthThunk, userRegistrationThunk} from '../../store/authThunks';
+import { checkAuthThunk, userRegistrationThunk } from '../../store/Thunks/authThunks';
 import { useAppDispatch } from '../../store/hooks';
 
 
@@ -14,25 +14,25 @@ const Register = () => {
 
   const navigate = useNavigate();
 
-const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setError("");
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
 
-  try {
-    // 1️⃣ Register (cookie set)
-    await dispatch(
-      userRegistrationThunk({ name, email, password })
-    ).unwrap();
+    try {
+      // 1️⃣ Register (cookie set)
+      await dispatch(
+        userRegistrationThunk({ name, email, password })
+      ).unwrap();
 
-    // 2️⃣ Load authenticated user into Redux
-    await dispatch(checkAuthThunk()).unwrap();
+      // 2️⃣ Load authenticated user into Redux
+      await dispatch(checkAuthThunk()).unwrap();
 
-    // 3️⃣ NOW redirect
-    navigate("/dashboard", { replace: true });
-  } catch (err: any) {
-    setError(err);
-  }
-};
+      // 3️⃣ NOW redirect
+      navigate("/dashboard", { replace: true });
+    } catch (err: any) {
+      setError(err);
+    }
+  };
 
   return (
     <div className="flex min-h-full flex-col justify-center py-12 sm:px-6 lg:px-8 bg-gray-50">

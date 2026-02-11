@@ -1,6 +1,6 @@
 import { createSlice } from "@reduxjs/toolkit";
-import { loginThunk, checkAuthThunk, logoutThunk } from "./authThunks";
-import type { User } from "../types/auth";
+import { loginThunk, checkAuthThunk, logoutThunk } from "../Thunks/authThunks";
+import type { User } from "../../types/auth";
 
 interface AuthState {
   user?: User | null;
@@ -52,8 +52,6 @@ const authSlice = createSlice({
         state.loading = false; // 🔴 REQUIRED
       })
 
-
-      
       // ================= LOGOUT =================
       .addCase(logoutThunk.fulfilled, (state) => {
         state.user = null;

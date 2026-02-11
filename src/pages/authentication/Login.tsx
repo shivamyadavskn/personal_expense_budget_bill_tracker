@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAppDispatch } from '../../store/hooks';
-import { loginThunk } from '../../store/authThunks';
+import { loginThunk } from '../../store/Thunks/authThunks';
 
 const Login = () => {
   const [email, setEmail] = useState("");

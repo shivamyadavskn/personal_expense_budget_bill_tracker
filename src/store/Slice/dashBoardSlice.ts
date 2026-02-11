@@ -1,5 +1,5 @@
 import { createSlice } from "@reduxjs/toolkit";
-import { fetchDashboardDataThunk } from "./dashBoardThunks";
+import { fetchDashboardDataThunk } from "../Thunks/dashBoardThunks";
 
 const initialState = {
   overview: null as any | null,
