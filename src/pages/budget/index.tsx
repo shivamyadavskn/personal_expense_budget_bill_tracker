@@ -1,541 +1,825 @@
-"use client"
+import React, { useEffect, useMemo, useState } from "react";
+import { Eye, Filter, SquarePenIcon, Trash, X } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
+import CustomModal from "../../components/CustomModal";
+import CustomPagination from "../../components/Pagination";
+import { budgetService } from "../../service/budget.service";
 
-import React from "react"
-import { useState } from "react"
-import {
-  PlusIcon,
-  MagnifyingGlassIcon,
-  FunnelIcon,
-  PencilSquareIcon,
-  TrashIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  XMarkIcon,
-  ExclamationTriangleIcon,
-} from "@heroicons/react/24/outline"
-import { ChevronDownIcon } from "@heroicons/react/16/solid"
+type BudgetRecord = {
+  _id: string;
+  month: number;
+  year: number;
+  totalBudget: number;
+  totalSpent: number;
+  remaining: number;
+  percentageUsed: number;
+  categoryBudgets: Record<string, number>;
+};
 
-const initialBudgets = [
-  { id: 1, name: "Groceries & Food", category: "Food & Dining", allocated: 600.00, spent: 450.00, period: "Monthly", status: "Active" },
-  { id: 2, name: "Dining Out & Takeout", category: "Food & Dining", allocated: 200.00, spent: 185.00, period: "Monthly", status: "Active" },
-  { id: 3, name: "Entertainment", category: "Entertainment", allocated: 150.00, spent: 165.00, period: "Monthly", status: "Exceeded" },
-  { id: 4, name: "Transportation", category: "Transportation", allocated: 300.00, spent: 220.00, period: "Monthly", status: "Active" },
-  { id: 5, name: "Shopping & Clothing", category: "Shopping", allocated: 250.00, spent: 250.00, period: "Monthly", status: "Completed" },
-  { id: 6, name: "Health & Wellness", category: "Health", allocated: 100.00, spent: 65.00, period: "Monthly", status: "Active" },
-  { id: 7, name: "Personal Care", category: "Personal", allocated: 75.00, spent: 40.00, period: "Monthly", status: "Active" },
-  { id: 8, name: "Vacation Fund", category: "Savings", allocated: 2000.00, spent: 800.00, period: "Quarterly", status: "Active" },
-  { id: 9, name: "Emergency Fund", category: "Savings", allocated: 6000.00, spent: 4500.00, period: "Annual", status: "Active" },
-  { id: 10, name: "Gifts & Donations", category: "Personal", allocated: 500.00, spent: 125.00, period: "Quarterly", status: "Active" },
-]
+type BudgetFilters = {
+  category: string;
+  dateFrom: string;
+  dateTo: string;
+  minAmount: string;
+  maxAmount: string;
+};
 
-const categories = ["All Categories", "Food & Dining", "Entertainment", "Transportation", "Shopping", "Health", "Personal", "Savings"]
-const periods = ["All Periods", "Weekly", "Monthly", "Quarterly", "Annual"]
-const statuses = ["All Status", "Active", "Exceeded", "Completed"]
+type BudgetFormState = {
+  month: string;
+  year: string;
+  totalBudget: string;
+  category: string;
+  categoryAmount: string;
+};
 
-type Budget = {
-  id: number
-  name: string
-  category: string
-  allocated: number
-  spent: number
-  period: string
-  status: string
-}
+const budgetCategories = [
+  "food",
+  "groceries",
+  "transport",
+  "fuel",
+  "rent",
+  "utilities",
+  "shopping",
+  "entertainment",
+  "subscriptions",
+  "health",
+  "education",
+  "travel",
+  "insurance",
+  "emi",
+  "investment",
+  "others",
+];
+
+const defaultFilters: BudgetFilters = {
+  category: "All",
+  dateFrom: "",
+  dateTo: "",
+  minAmount: "",
+  maxAmount: "",
+};
+
+const getDefaultFormState = (): BudgetFormState => {
+  const now = new Date();
+  return {
+    month: String(now.getMonth() + 1),
+    year: String(now.getFullYear()),
+    totalBudget: "",
+    category: "others",
+    categoryAmount: "",
+  };
+};
+
+const toNumberOrNull = (value: string): number | null => {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+  }).format(Number(value || 0));
+
+const formatCategory = (value: string) =>
+  value.charAt(0).toUpperCase() + value.slice(1);
+
+const getMonthYear = (month: number, year: number) =>
+  new Date(year, month - 1, 1).toLocaleDateString("en-US", {
+    month: "short",
+    year: "numeric",
+  });
+
+const getProgressColor = (percentage: number) => {
+  if (percentage >= 100) return "bg-red-500";
+  if (percentage >= 80) return "bg-amber-500";
+  return "bg-emerald-500";
+};
 
 export default function BudgetsIndex() {
-  const [budgets, setBudgets] = useState<Budget[]>(initialBudgets)
-  const [searchQuery, setSearchQuery] = useState("")
-  const [selectedCategory, setSelectedCategory] = useState("All Categories")
-  const [selectedPeriod, setSelectedPeriod] = useState("All Periods")
-  const [selectedStatus, setSelectedStatus] = useState("All Status")
-  const [currentPage, setCurrentPage] = useState(1)
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [editingBudget, setEditingBudget] = useState<Budget | null>(null)
-  const [formData, setFormData] = useState({
-    name: "",
-    category: "Food & Dining",
-    allocated: "",
-    period: "Monthly",
-  })
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [budgetToDelete, setBudgetToDelete] = useState<Budget | null>(null)
+  const [params, setParams] = useSearchParams();
+  const rawPage = Number(params.get("page"));
+  const page = Number.isFinite(rawPage) && rawPage > 0 ? Math.floor(rawPage) : 1;
+  const limit = 10;
 
-  const itemsPerPage = 5
+  const [budgets, setBudgets] = useState<BudgetRecord[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filters, setFilters] = useState<BudgetFilters>(defaultFilters);
+  const [appliedFilters, setAppliedFilters] = useState<BudgetFilters>(defaultFilters);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [pagination, setPagination] = useState({
+    total: 0,
+    totalPages: 1,
+    page: 1,
+    limit,
+  });
 
-  const filteredBudgets = budgets.filter((budget) => {
-    const matchesSearch = budget.name.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesCategory = selectedCategory === "All Categories" || budget.category === selectedCategory
-    const matchesPeriod = selectedPeriod === "All Periods" || budget.period === selectedPeriod
-    const matchesStatus = selectedStatus === "All Status" || budget.status === selectedStatus
-    return matchesSearch && matchesCategory && matchesPeriod && matchesStatus
-  })
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<"create" | "edit">("create");
+  const [submitting, setSubmitting] = useState(false);
+  const [editingBudgetId, setEditingBudgetId] = useState<string | null>(null);
+  const [form, setForm] = useState<BudgetFormState>(getDefaultFormState);
 
-  const totalPages = Math.ceil(filteredBudgets.length / itemsPerPage)
-  const paginatedBudgets = filteredBudgets.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  )
+  const [viewOpen, setViewOpen] = useState(false);
+  const [selectedBudget, setSelectedBudget] = useState<BudgetRecord | null>(null);
+  const [selectedLoading, setSelectedLoading] = useState(false);
+  const [activeActionId, setActiveActionId] = useState<string | null>(null);
 
-  const handleOpenModal = (budget?: Budget) => {
-    if (budget) {
-      setEditingBudget(budget)
-      setFormData({
-        name: budget.name,
-        category: budget.category,
-        allocated: budget.allocated.toString(),
-        period: budget.period,
-      })
-    } else {
-      setEditingBudget(null)
-      setFormData({ name: "", category: "Food & Dining", allocated: "", period: "Monthly" })
+  const requestPayload = useMemo(
+    () => ({
+      page,
+      limit,
+      search: searchQuery.trim(),
+      category:
+        appliedFilters.category === "All"
+          ? ""
+          : appliedFilters.category.toLowerCase(),
+      min: toNumberOrNull(appliedFilters.minAmount),
+      max: toNumberOrNull(appliedFilters.maxAmount),
+      startDate: appliedFilters.dateFrom,
+      endDate: appliedFilters.dateTo,
+      sort: "date_desc" as const,
+    }),
+    [appliedFilters, limit, page, searchQuery]
+  );
+
+  const fetchBudgets = async (payload = requestPayload) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await budgetService.listBudgets(payload);
+      const data = response.data?.data || {};
+      setBudgets(Array.isArray(data.budgets) ? data.budgets : []);
+      setPagination({
+        total: Number(data.total || 0),
+        totalPages: Number(data.totalPages || 1),
+        page: Number(data.page || payload.page),
+        limit: Number(data.limit || payload.limit),
+      });
+    } catch (err: any) {
+      setError(err.response?.data?.message || "Failed to fetch budgets");
+      setBudgets([]);
+      setPagination({ total: 0, totalPages: 1, page: payload.page, limit: payload.limit });
+    } finally {
+      setLoading(false);
     }
-    setIsModalOpen(true)
-  }
+  };
 
-  const handleCloseModal = () => {
-    setIsModalOpen(false)
-    setEditingBudget(null)
-    setFormData({ name: "", category: "Food & Dining", allocated: "", period: "Monthly" })
-  }
+  useEffect(() => {
+    fetchBudgets();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestPayload]);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (editingBudget) {
-      setBudgets(budgets.map((budget) =>
-        budget.id === editingBudget.id
-          ? { ...budget, name: formData.name, category: formData.category, allocated: parseFloat(formData.allocated), period: formData.period }
-          : budget
-      ))
-    } else {
-      const newBudget: Budget = {
-        id: Math.max(...budgets.map((b) => b.id)) + 1,
-        name: formData.name,
-        category: formData.category,
-        allocated: parseFloat(formData.allocated),
-        spent: 0,
-        period: formData.period,
-        status: "Active",
+  useEffect(() => {
+    if (page > pagination.totalPages) {
+      setParams({ page: String(Math.max(1, pagination.totalPages)) });
+    }
+  }, [page, pagination.totalPages, setParams]);
+
+  const goToFirstPage = () => {
+    if (page !== 1) setParams({ page: "1" });
+  };
+
+  const onPageChange = (nextPage: number) => {
+    const bounded = Math.min(Math.max(nextPage, 1), Math.max(1, pagination.totalPages));
+    setParams({ page: String(bounded) });
+  };
+
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    goToFirstPage();
+  };
+
+  const hasActiveFilters =
+    appliedFilters.category !== "All" ||
+    appliedFilters.dateFrom !== "" ||
+    appliedFilters.dateTo !== "" ||
+    appliedFilters.minAmount !== "" ||
+    appliedFilters.maxAmount !== "";
+
+  const openCreateModal = () => {
+    setModalMode("create");
+    setEditingBudgetId(null);
+    setForm(getDefaultFormState());
+    setModalOpen(true);
+  };
+
+  const closeBudgetModal = () => {
+    if (submitting) return;
+    setModalOpen(false);
+    setEditingBudgetId(null);
+    setForm(getDefaultFormState());
+  };
+
+  const buildCategoryBudgets = () => {
+    const categoryBudgets: Record<string, number> = {};
+    budgetCategories.forEach((category) => {
+      categoryBudgets[category] = 0;
+    });
+    const categoryAmount = Number(form.categoryAmount || 0);
+    if (categoryAmount > 0 && budgetCategories.includes(form.category)) {
+      categoryBudgets[form.category] = categoryAmount;
+    }
+    return categoryBudgets;
+  };
+
+  const handleSubmitBudget = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const month = Number(form.month);
+    const year = Number(form.year);
+    const totalBudget = Number(form.totalBudget);
+    const categoryAmount = Number(form.categoryAmount || 0);
+    if (month < 1 || month > 12) {
+      setError("Month must be between 1 and 12.");
+      return;
+    }
+    if (!Number.isFinite(year) || year < 2000) {
+      setError("Enter a valid year.");
+      return;
+    }
+    if (!Number.isFinite(totalBudget) || totalBudget <= 0) {
+      setError("Total budget must be greater than 0.");
+      return;
+    }
+    if (categoryAmount > totalBudget) {
+      setError("Category amount cannot be greater than total budget.");
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+    try {
+      const payload = {
+        month,
+        year,
+        totalBudget,
+        categoryBudgets: buildCategoryBudgets(),
+      };
+      if (modalMode === "edit" && editingBudgetId) {
+        await budgetService.updateBudget(editingBudgetId, payload);
+      } else {
+        await budgetService.createBudget(payload);
       }
-      setBudgets([newBudget, ...budgets])
+      closeBudgetModal();
+      await fetchBudgets();
+    } catch (err: any) {
+      setError(err.response?.data?.message || "Failed to save budget");
+    } finally {
+      setSubmitting(false);
     }
-    handleCloseModal()
-  }
+  };
 
-  const handleDeleteClick = (budget: Budget) => {
-    setBudgetToDelete(budget)
-    setDeleteDialogOpen(true)
-  }
+  const fetchBudgetById = async (budgetId: string) => {
+    const response = await budgetService.getBudgetById(budgetId);
+    return response.data?.data?.budget as BudgetRecord;
+  };
 
-  const handleConfirmDelete = () => {
-    if (budgetToDelete) {
-      setBudgets(budgets.filter((budget) => budget.id !== budgetToDelete.id))
+  const handleView = async (budget: BudgetRecord) => {
+    setActiveActionId(budget._id);
+    setSelectedLoading(true);
+    try {
+      const budgetData = await fetchBudgetById(budget._id);
+      setSelectedBudget(budgetData || budget);
+      setViewOpen(true);
+    } catch (err: any) {
+      setError(err.response?.data?.message || "Failed to fetch budget details");
+    } finally {
+      setSelectedLoading(false);
+      setActiveActionId(null);
     }
-    setDeleteDialogOpen(false)
-    setBudgetToDelete(null)
-  }
+  };
 
-  const handleCancelDelete = () => {
-    setDeleteDialogOpen(false)
-    setBudgetToDelete(null)
-  }
+  const handleEdit = async (budget: BudgetRecord) => {
+    setActiveActionId(budget._id);
+    setSelectedLoading(true);
+    try {
+      const budgetData = await fetchBudgetById(budget._id);
+      const categoryEntries = Object.entries(budgetData.categoryBudgets || {});
+      const highestCategory =
+        categoryEntries.sort((a, b) => Number(b[1]) - Number(a[1]))[0] || null;
 
-  const getStatusStyles = (status: string) => {
-    switch (status) {
-      case "Active":
-        return "bg-emerald-50 text-emerald-700 ring-emerald-600/20"
-      case "Exceeded":
-        return "bg-red-50 text-red-700 ring-red-600/20"
-      case "Completed":
-        return "bg-blue-50 text-blue-700 ring-blue-600/20"
-      default:
-        return "bg-gray-50 text-gray-700 ring-gray-600/20"
+      setModalMode("edit");
+      setEditingBudgetId(budgetData._id);
+      setForm({
+        month: String(budgetData.month),
+        year: String(budgetData.year),
+        totalBudget: String(budgetData.totalBudget),
+        category: highestCategory?.[0] || "others",
+        categoryAmount: highestCategory?.[1] ? String(highestCategory[1]) : "",
+      });
+      setModalOpen(true);
+    } catch (err: any) {
+      setError(err.response?.data?.message || "Failed to fetch budget details");
+    } finally {
+      setSelectedLoading(false);
+      setActiveActionId(null);
     }
-  }
+  };
 
-  const getProgressPercentage = (spent: number, allocated: number) => {
-    return Math.min((spent / allocated) * 100, 100)
-  }
+  const handleDelete = async (budget: BudgetRecord) => {
+    const shouldDelete = window.confirm(
+      `Delete budget for ${getMonthYear(budget.month, budget.year)}?`
+    );
+    if (!shouldDelete) return;
 
-  const getProgressColor = (spent: number, allocated: number) => {
-    const percentage = (spent / allocated) * 100
-    if (percentage >= 100) return "bg-red-500"
-    if (percentage >= 80) return "bg-amber-500"
-    return "bg-emerald-500"
-  }
+    setActiveActionId(budget._id);
+    setError(null);
+    try {
+      await budgetService.deleteBudget(budget._id);
+      const nextPage = page > 1 && budgets.length === 1 ? page - 1 : page;
+      if (nextPage !== page) {
+        setParams({ page: String(nextPage) });
+      } else {
+        await fetchBudgets({ ...requestPayload, page: nextPage });
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.message || "Failed to delete budget");
+    } finally {
+      setActiveActionId(null);
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-6xl">
-        {/* Header */}
-        <div className="mb-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-gray-900">Budgets</h1>
-              <p className="mt-1 text-sm text-gray-500">
-                Plan and monitor your spending budgets.
-              </p>
-            </div>
+    <>
+      <div className="px-4 sm:px-6 lg:px-8">
+        <div className="sm:flex sm:items-center">
+          <div className="sm:flex-auto">
+            <h1 className="text-base font-semibold text-gray-900">Budgets</h1>
+            <p className="mt-2 text-sm text-gray-700">
+              Manage monthly budgets with server-side filters and pagination.
+            </p>
+          </div>
+          <div className="mt-4 sm:ml-16 sm:mt-0 sm:flex-none">
             <button
+              onClick={openCreateModal}
               type="button"
-              onClick={() => handleOpenModal()}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 transition-colors"
+              className="block rounded-md bg-indigo-600 px-3 py-2 text-center text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
             >
-              <PlusIcon className="size-5" />
-              Add Budget
+              Add budget
             </button>
           </div>
         </div>
 
-        {/* Filters */}
-        <div className="mb-6 rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-900/5">
-          <div className="flex items-center gap-2 mb-4">
-            <FunnelIcon className="size-5 text-gray-400" />
-            <span className="text-sm font-medium text-gray-700">Filters</span>
+        {error && (
+          <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error}
           </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        )}
+
+        <div className="mt-6 flex flex-col gap-4 sm:flex-row">
+          <div className="flex-1">
             <div className="relative">
-              <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 size-5 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search budgets..."
+                placeholder="Search budgets by month/year..."
                 value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value)
-                  setCurrentPage(1)
-                }}
-                className="block w-full rounded-lg border-0 bg-gray-50 py-2.5 pl-10 pr-4 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm transition-shadow"
+                onChange={(e) => handleSearchChange(e.target.value)}
+                className="block w-full rounded-md border-0 py-2 pl-4 pr-10 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-indigo-600 sm:text-sm"
               />
+              {searchQuery && (
+                <button
+                  onClick={() => handleSearchChange("")}
+                  className="absolute inset-y-0 right-0 flex items-center pr-3"
+                  type="button"
+                >
+                  <X className="h-4 w-4 text-gray-400 hover:text-gray-600" />
+                </button>
+              )}
             </div>
-            <div className="relative">
-              <select
-                value={selectedCategory}
-                onChange={(e) => {
-                  setSelectedCategory(e.target.value)
-                  setCurrentPage(1)
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setFilterOpen(true)}
+              type="button"
+              className="inline-flex items-center gap-2 rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
+            >
+              <Filter className="h-4 w-4" />
+              Filters
+              {hasActiveFilters && (
+                <span className="ml-1 inline-flex items-center rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-800">
+                  Active
+                </span>
+              )}
+            </button>
+            {hasActiveFilters && (
+              <button
+                onClick={() => {
+                  setFilters(defaultFilters);
+                  setAppliedFilters(defaultFilters);
+                  goToFirstPage();
                 }}
-                className="block w-full appearance-none rounded-lg border-0 bg-gray-50 py-2.5 pl-4 pr-10 text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm transition-shadow"
+                type="button"
+                className="inline-flex items-center gap-2 rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
               >
-                {categories.map((category) => (
-                  <option key={category} value={category}>{category}</option>
-                ))}
-              </select>
-              <ChevronDownIcon className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 size-5 text-gray-400" />
-            </div>
-            <div className="relative">
-              <select
-                value={selectedPeriod}
-                onChange={(e) => {
-                  setSelectedPeriod(e.target.value)
-                  setCurrentPage(1)
-                }}
-                className="block w-full appearance-none rounded-lg border-0 bg-gray-50 py-2.5 pl-4 pr-10 text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm transition-shadow"
-              >
-                {periods.map((period) => (
-                  <option key={period} value={period}>{period}</option>
-                ))}
-              </select>
-              <ChevronDownIcon className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 size-5 text-gray-400" />
-            </div>
-            <div className="relative">
-              <select
-                value={selectedStatus}
-                onChange={(e) => {
-                  setSelectedStatus(e.target.value)
-                  setCurrentPage(1)
-                }}
-                className="block w-full appearance-none rounded-lg border-0 bg-gray-50 py-2.5 pl-4 pr-10 text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm transition-shadow"
-              >
-                {statuses.map((status) => (
-                  <option key={status} value={status}>{status}</option>
-                ))}
-              </select>
-              <ChevronDownIcon className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 size-5 text-gray-400" />
-            </div>
+                Clear
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Table */}
-        <div className="rounded-xl bg-white shadow-sm ring-1 ring-gray-900/5 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 sm:pl-6">Budget Name</th>
-                  <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Category</th>
-                  <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Progress</th>
-                  <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Period</th>
-                  <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Status</th>
-                  <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6">
-                    <span className="sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 bg-white">
-                {paginatedBudgets.map((budget) => (
-                  <tr key={budget.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">
-                      {budget.name}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{budget.category}</td>
-                    <td className="px-3 py-4 text-sm">
-                      <div className="w-40">
-                        <div className="flex items-center justify-between text-xs mb-1">
-                          <span className="text-gray-500">${budget.spent.toLocaleString()}</span>
-                          <span className="text-gray-900 font-medium">${budget.allocated.toLocaleString()}</span>
-                        </div>
-                        <div className="h-2 w-full rounded-full bg-gray-200">
-                          <div
-                            className={`h-2 rounded-full ${getProgressColor(budget.spent, budget.allocated)}`}
-                            style={{ width: `${getProgressPercentage(budget.spent, budget.allocated)}%` }}
-                          />
-                        </div>
-                      </div>
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{budget.period}</td>
-                    <td className="whitespace-nowrap px-3 py-4 text-sm">
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${getStatusStyles(budget.status)}`}>
-                        {budget.status}
-                      </span>
-                    </td>
-                    <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm sm:pr-6">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenModal(budget)}
-                          className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-indigo-600 transition-colors"
-                        >
-                          <PencilSquareIcon className="size-5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteClick(budget)}
-                          className="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-                        >
-                          <TrashIcon className="size-5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {paginatedBudgets.length === 0 && (
+        <div className="mt-8 flow-root">
+          <div className="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
+            <div className="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8">
+              <table className="relative min-w-full divide-y divide-gray-300">
+                <thead>
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-sm text-gray-500">
-                      No budgets found matching your criteria.
-                    </td>
+                    <th className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-0">
+                      Period
+                    </th>
+                    <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
+                      Budget
+                    </th>
+                    <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
+                      Spent
+                    </th>
+                    <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
+                      Remaining
+                    </th>
+                    <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
+                      Usage
+                    </th>
+                    <th className="py-3.5 pl-3 pr-4 sm:pr-0">
+                      <span className="sr-only">Actions</span>
+                    </th>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination */}
-          <div className="flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-6">
-            <div className="flex flex-1 justify-between sm:hidden">
-              <button
-                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                disabled={currentPage === 1}
-                className="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Previous
-              </button>
-              <button
-                onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                disabled={currentPage === totalPages}
-                className="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Next
-              </button>
-            </div>
-            <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm text-gray-700">
-                  Showing <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> to{" "}
-                  <span className="font-medium">{Math.min(currentPage * itemsPerPage, filteredBudgets.length)}</span> of{" "}
-                  <span className="font-medium">{filteredBudgets.length}</span> results
-                </p>
-              </div>
-              <div>
-                <nav className="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
-                  <button
-                    onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                    disabled={currentPage === 1}
-                    className="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <ChevronLeftIcon className="size-5" />
-                  </button>
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                    <button
-                      key={page}
-                      onClick={() => setCurrentPage(page)}
-                      className={`relative inline-flex items-center px-4 py-2 text-sm font-semibold ${
-                        page === currentPage
-                          ? "z-10 bg-indigo-600 text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
-                          : "text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0"
-                      }`}
-                    >
-                      {page}
-                    </button>
-                  ))}
-                  <button
-                    onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                    disabled={currentPage === totalPages}
-                    className="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <ChevronRightIcon className="size-5" />
-                  </button>
-                </nav>
-              </div>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={6} className="py-10 text-center text-sm text-gray-500">
+                        Loading budgets...
+                      </td>
+                    </tr>
+                  ) : budgets.length ? (
+                    budgets.map((budget) => (
+                      <tr key={budget._id}>
+                        <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-0">
+                          {getMonthYear(budget.month, budget.year)}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                          {formatCurrency(budget.totalBudget)}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                          {formatCurrency(budget.totalSpent)}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                          {formatCurrency(budget.remaining)}
+                        </td>
+                        <td className="px-3 py-4 text-sm text-gray-500">
+                          <div className="w-32">
+                            <div className="mb-1 text-xs text-gray-600">
+                              {Math.min(100, Number(budget.percentageUsed || 0))}%
+                            </div>
+                            <div className="h-2 w-full rounded-full bg-gray-200">
+                              <div
+                                className={`h-2 rounded-full ${getProgressColor(
+                                  Number(budget.percentageUsed || 0)
+                                )}`}
+                                style={{
+                                  width: `${Math.min(
+                                    100,
+                                    Number(budget.percentageUsed || 0)
+                                  )}%`,
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </td>
+                        <td className="whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-0">
+                          <div className="flex justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleView(budget)}
+                              disabled={activeActionId === budget._id}
+                              className="text-indigo-600 hover:text-indigo-900 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleEdit(budget)}
+                              disabled={activeActionId === budget._id}
+                              className="text-indigo-600 hover:text-indigo-900 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              <SquarePenIcon className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(budget)}
+                              disabled={activeActionId === budget._id}
+                              className="text-red-600 hover:text-red-900 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              <Trash className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={6} className="py-10 text-center text-sm text-gray-500">
+                        No budgets found matching your filters.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
+
+        <CustomPagination
+          page={Math.min(page, Math.max(1, pagination.totalPages))}
+          limit={limit}
+          total={pagination.total}
+          onPageChange={onPageChange}
+        />
       </div>
 
-      {/* Add/Edit Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex min-h-full items-center justify-center p-4">
-            <div className="fixed inset-0 bg-gray-500/75 transition-opacity" onClick={handleCloseModal} />
-            <div className="relative w-full max-w-lg transform rounded-2xl bg-white p-6 shadow-xl transition-all">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg font-semibold text-gray-900">
-                  {editingBudget ? "Edit Budget" : "Add New Budget"}
-                </h2>
-                <button
-                  type="button"
-                  onClick={handleCloseModal}
-                  className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
-                >
-                  <XMarkIcon className="size-5" />
-                </button>
-              </div>
-              <form onSubmit={handleSubmit} className="space-y-5">
-                <div>
-                  <label htmlFor="name" className="block text-sm font-medium text-gray-900">
-                    Budget Name
-                  </label>
-                  <input
-                    id="name"
-                    type="text"
-                    required
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="mt-2 block w-full rounded-lg border-0 bg-white px-3.5 py-2.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm transition-shadow"
-                    placeholder="e.g. Marketing Campaign Q1"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label htmlFor="category" className="block text-sm font-medium text-gray-900">
-                      Category
-                    </label>
-                    <div className="relative mt-2">
-                      <select
-                        id="category"
-                        value={formData.category}
-                        onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                        className="block w-full appearance-none rounded-lg border-0 bg-white px-3.5 py-2.5 pr-10 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm transition-shadow"
-                      >
-                        {categories.filter(c => c !== "All Categories").map((category) => (
-                          <option key={category} value={category}>{category}</option>
-                        ))}
-                      </select>
-                      <ChevronDownIcon className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 size-5 text-gray-400" />
-                    </div>
-                  </div>
-                  <div>
-                    <label htmlFor="period" className="block text-sm font-medium text-gray-900">
-                      Period
-                    </label>
-                    <div className="relative mt-2">
-                      <select
-                        id="period"
-                        value={formData.period}
-                        onChange={(e) => setFormData({ ...formData, period: e.target.value })}
-                        className="block w-full appearance-none rounded-lg border-0 bg-white px-3.5 py-2.5 pr-10 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm transition-shadow"
-                      >
-                        {periods.filter(p => p !== "All Periods").map((period) => (
-                          <option key={period} value={period}>{period}</option>
-                        ))}
-                      </select>
-                      <ChevronDownIcon className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 size-5 text-gray-400" />
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <label htmlFor="allocated" className="block text-sm font-medium text-gray-900">
-                    Allocated Amount
-                  </label>
-                  <input
-                    id="allocated"
-                    type="number"
-                    required
-                    step="0.01"
-                    min="0"
-                    value={formData.allocated}
-                    onChange={(e) => setFormData({ ...formData, allocated: e.target.value })}
-                    className="mt-2 block w-full rounded-lg border-0 bg-white px-3.5 py-2.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm transition-shadow"
-                    placeholder="0.00"
-                  />
-                </div>
-
-                <div className="flex items-center justify-end gap-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={handleCloseModal}
-                    className="rounded-lg bg-transparent px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-100 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors"
-                  >
-                    {editingBudget ? "Save Changes" : "Add Budget"}
-                  </button>
-                </div>
-              </form>
+      <CustomModal
+        open={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        title="Filter Budgets"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-900">Category</label>
+            <select
+              value={filters.category}
+              onChange={(e) => setFilters((prev) => ({ ...prev, category: e.target.value }))}
+              className="mt-2 block w-full rounded-md border-0 bg-white py-2 pl-3 pr-8 text-sm text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-indigo-600"
+            >
+              <option value="All">All</option>
+              {budgetCategories.map((category) => (
+                <option key={category} value={category}>
+                  {formatCategory(category)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-900">From</label>
+              <input
+                type="date"
+                value={filters.dateFrom}
+                onChange={(e) =>
+                  setFilters((prev) => ({ ...prev, dateFrom: e.target.value }))
+                }
+                className="mt-2 block w-full rounded-md border-0 bg-white py-2 px-3 text-sm text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-indigo-600"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-900">To</label>
+              <input
+                type="date"
+                value={filters.dateTo}
+                onChange={(e) =>
+                  setFilters((prev) => ({ ...prev, dateTo: e.target.value }))
+                }
+                className="mt-2 block w-full rounded-md border-0 bg-white py-2 px-3 text-sm text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-indigo-600"
+              />
             </div>
           </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-900">Min Amount</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={filters.minAmount}
+                onChange={(e) =>
+                  setFilters((prev) => ({ ...prev, minAmount: e.target.value }))
+                }
+                className="mt-2 block w-full rounded-md border-0 bg-white py-2 px-3 text-sm text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-indigo-600"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-900">Max Amount</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={filters.maxAmount}
+                onChange={(e) =>
+                  setFilters((prev) => ({ ...prev, maxAmount: e.target.value }))
+                }
+                className="mt-2 block w-full rounded-md border-0 bg-white py-2 px-3 text-sm text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-indigo-600"
+              />
+            </div>
+          </div>
+          <div className="mt-6 flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setFilters(defaultFilters);
+                setAppliedFilters(defaultFilters);
+                setFilterOpen(false);
+                goToFirstPage();
+              }}
+              className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
+            >
+              Reset
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterOpen(false)}
+              className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAppliedFilters(filters);
+                setFilterOpen(false);
+                goToFirstPage();
+              }}
+              className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+            >
+              Apply
+            </button>
+          </div>
         </div>
-      )}
+      </CustomModal>
 
-      {/* Delete Confirmation Dialog */}
-      {deleteDialogOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex min-h-full items-center justify-center p-4">
-            <div className="fixed inset-0 bg-gray-500/75 transition-opacity" onClick={handleCancelDelete} />
-            <div className="relative w-full max-w-sm transform rounded-2xl bg-white p-6 shadow-xl transition-all text-center">
-              <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-red-100 mb-4">
-                <ExclamationTriangleIcon className="size-6 text-red-600" />
-              </div>
-              <h2 className="text-lg font-semibold text-gray-900">Delete Budget</h2>
-              <p className="mt-2 text-sm text-gray-500">
-                Are you sure you want to delete{" "}
-                <span className="font-medium text-gray-700">{budgetToDelete?.name}</span>?
-                This action cannot be undone.
+      <CustomModal
+        open={modalOpen}
+        onClose={closeBudgetModal}
+        title={modalMode === "edit" ? "Edit Budget" : "Add Budget"}
+      >
+        <form className="space-y-4" onSubmit={handleSubmitBudget}>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-900">Month</label>
+              <input
+                type="number"
+                min="1"
+                max="12"
+                required
+                value={form.month}
+                onChange={(e) => setForm((prev) => ({ ...prev, month: e.target.value }))}
+                className="mt-2 block w-full rounded-md border-0 bg-white py-2 px-3 text-sm text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-indigo-600"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-900">Year</label>
+              <input
+                type="number"
+                min="2000"
+                required
+                value={form.year}
+                onChange={(e) => setForm((prev) => ({ ...prev, year: e.target.value }))}
+                className="mt-2 block w-full rounded-md border-0 bg-white py-2 px-3 text-sm text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-indigo-600"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-900">Total Budget</label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              required
+              value={form.totalBudget}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, totalBudget: e.target.value }))
+              }
+              className="mt-2 block w-full rounded-md border-0 bg-white py-2 px-3 text-sm text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-indigo-600"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-900">
+                Primary Category
+              </label>
+              <select
+                value={form.category}
+                onChange={(e) => setForm((prev) => ({ ...prev, category: e.target.value }))}
+                className="mt-2 block w-full rounded-md border-0 bg-white py-2 pl-3 pr-8 text-sm text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-indigo-600"
+              >
+                {budgetCategories.map((category) => (
+                  <option key={category} value={category}>
+                    {formatCategory(category)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-900">
+                Category Amount
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.categoryAmount}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, categoryAmount: e.target.value }))
+                }
+                className="mt-2 block w-full rounded-md border-0 bg-white py-2 px-3 text-sm text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-indigo-600"
+              />
+            </div>
+          </div>
+
+          <div className="mt-6 flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={closeBudgetModal}
+              className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {submitting
+                ? "Saving..."
+                : modalMode === "edit"
+                  ? "Save Changes"
+                  : "Create Budget"}
+            </button>
+          </div>
+        </form>
+      </CustomModal>
+
+      <CustomModal
+        open={viewOpen}
+        onClose={() => setViewOpen(false)}
+        title="Budget Details"
+      >
+        {selectedLoading ? (
+          <p className="text-sm text-gray-600">Loading details...</p>
+        ) : selectedBudget ? (
+          <div className="space-y-3 text-sm text-gray-700">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                Period
               </p>
-              <div className="flex items-center justify-center gap-3 mt-6">
-                <button
-                  type="button"
-                  onClick={handleCancelDelete}
-                  className="rounded-lg bg-transparent px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-100 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirmDelete}
-                  className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-red-500 transition-colors"
-                >
-                  Delete
-                </button>
+              <p className="mt-1 font-medium text-gray-900">
+                {getMonthYear(selectedBudget.month, selectedBudget.year)}
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                  Total Budget
+                </p>
+                <p className="mt-1">{formatCurrency(selectedBudget.totalBudget)}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                  Total Spent
+                </p>
+                <p className="mt-1">{formatCurrency(selectedBudget.totalSpent)}</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                  Remaining
+                </p>
+                <p className="mt-1">{formatCurrency(selectedBudget.remaining)}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                  Usage
+                </p>
+                <p className="mt-1">{selectedBudget.percentageUsed}%</p>
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                Category Budgets
+              </p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {Object.entries(selectedBudget.categoryBudgets || {})
+                  .filter(([, amount]) => Number(amount) > 0)
+                  .map(([category, amount]) => (
+                    <div
+                      key={category}
+                      className="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-700"
+                    >
+                      {formatCategory(category)}: {formatCurrency(Number(amount))}
+                    </div>
+                  ))}
               </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
-  )
+        ) : (
+          <p className="text-sm text-gray-600">Budget details are unavailable.</p>
+        )}
+      </CustomModal>
+    </>
+  );
 }
