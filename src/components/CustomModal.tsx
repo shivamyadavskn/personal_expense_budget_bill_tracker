@@ -15,7 +15,7 @@ const CustomModal = ({
     children,
 }: CustomModalProps) => {
     return (
-        <Dialog open={open} onClose={onClose} className="relative z-10">
+        <Dialog open={open} onClose={onClose} className="relative z-10 m-6">
             <DialogBackdrop
                 transition
                 className="fixed inset-0 bg-gray-100/75 transition-opacity"
